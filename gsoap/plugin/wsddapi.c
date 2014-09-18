@@ -68,8 +68,8 @@ To use the wsdd library:
 -# Define WS-Discovery event handlers in your code, see Section @ref wsdd_2.
 -# Use the wsdd API functions as described below.
 -# (Re-)compile and link stdsoap2.c/pp or libgsoap, (dom.c/.cpp when needed),
-   wsddapi.c and the soapcpp2-generated source files. Compile and link with
-   plugin/threads.c when needed.
+   wsddapi.c, wsaapi.c and the soapcpp2-generated source files. Compile and link
+   with plugin/threads.c when needed.
 
 The material in this document pertains to the WS-Discovery protocol and model
 and assumes that the reader is familiar with the WS-Discovery protocol, its
@@ -172,13 +172,37 @@ soap_wsdd_Hello(soap,
   75965);               // MDVersion
 @endcode
 
-Note that the Types is a string with namespace-qualified names (QNames). These
+Note that Types is a string with namespace-qualified names (QNames). These
 should be qualified as in "namespace":name or you can use a namespace prefix
 that is part of your namespace table (in the .nsmap). So you can use
 "wsdd:DiscoveryPRoxy" as a QName in Types because wsdd is a namespace prefix
 with a defined binding in the namespace table.
 
-To send a Bye message by to leave a network:
+For UDP multicast, use
+
+@code
+soap.connect_flags = SO_BROADCAST;
+@endcode
+
+and optionally set the interface and TTL settings:
+
+@code
+in_addr_t addr = inet_addr("1.2.3.4");
+soap.ipv4_multicast_if = &addr; // see setsockopt IPPROTO_IP IP_MULTICAST_IF
+soap.ipv6_multicast_if = addr; // multicast sin6_scope_id
+soap.ipv4_multicast_ttl = 1; // see setsockopt IPPROTO_IP, IP_MULTICAST_TTL
+@endcode
+
+Please refer to the socket options for IPPROTO_IP IP_MULTICAST_IF to specify
+the default interface for multicast datagrams to be sent from. Otherwise,
+the default interface set by the system administrator will be used (if any).
+
+Please refer to the socket options for IPPROTO_IP IP_MULTICAST_TTL to limit
+the lifetime of the packet. Multicast datagrams are sent with a default value
+of 1, to prevent them to be forwarded beyond the local network. This parameter
+can be set between 1 to 255.
+
+To send a Bye message to leave a network:
 
 @code
 soap_wsdd_Bye(soap,
@@ -305,20 +329,61 @@ int wsddService::ResolveProbeMatches(struct wsdd__ResolveMatchesType *matches)
 }
 @endcode
 
+Another approach to generate the WSDD service operations is to run soapcpp2
+separately on wsdd.h (or wsdd10.h for WS-Discovery 1.0) by soapcpp2 -a -L
+-pwsdd wsdd.h to generate wsddService.cpp. Then chain the service operations at
+the server side:
+
+@code
+if (soap_begin_serve(service.soap) == SOAP_OK)
+  if (service.dispatch() == SOAP_NO_METHOD)
+    soap_serve_request(service.soap);
+@endcode
+
+where the 'service' object is an instance of the application services generated
+by soapcpp2 -j.
+
 @section wsdd_6 Miscellaneous
 
 You MUST generate client-side operations that the WSDD library expects to be
 linked with, by executing:
 
 @code
-> soapcpp2 -CL -Iimport import/wsdd.h
+> soapcpp2 -L -pwsdd -Iimport import/wsdd.h
 @endcode
 
-Then compile and link the generated soapClient.cpp code with your project.
+Then compile and link the generated wsddClient.cpp code with your project.
+
+Because WS-Addressing may relay faults to a FaultTo service, you need to
+define a SOAP Fault service operation to accept and handle these:
+
+@code
+int SOAP_ENV__Fault(struct soap *soap, char *faultcode, char *faultstring, char *faultactor, struct SOAP_ENV__Detail *detail, struct SOAP_ENV__Code *SOAP_ENV__Code, struct SOAP_ENV__Reason *SOAP_ENV__Reason, char *SOAP_ENV__Node, char *SOAP_ENV__Role, struct SOAP_ENV__Detail *SOAP_ENV__Detail)
+{ 
+  ... = faultcode; // SOAP 1.1 fault code string (QName)
+  ... = faultstring; // SOAP 1.1 fault string
+  ... = faultactor; // SOAP 1.1 fault actor string
+  ... = detail; // SOAP 1.1 fault detail struct
+  ... = SOAP_ENV__Code; // SOAP 1.2 fault code struct
+  ... = SOAP_ENV__Reason; // SOAP 1.2 reason struct
+  ... = SOAP_ENV__Node; // SOAP 1.2 node string
+  ... = SOAP_ENV__Role; // SOAP 1.2 role string
+  ... = SOAP_ENV__Detail; // SOAP 1.2 detail struct
+  return SOAP_OK;
+}
+@endcode
 
 */
 
 #include "wsddapi.h"
+
+#ifdef SOAP_WSA_2005
+/* WS-Discovery 1.0 */
+const char *to_ts_URL = "urn:schemas-xmlsoap-org:ws:2005:04:discovery";
+#else
+/* WS-Discovery 1.1 */
+const char *to_ts_URL = "urn:docs-oasis-open-org:ws-dd:ns:discovery:2009:01";
+#endif
 
 /******************************************************************************\
  *
@@ -378,18 +443,22 @@ soap_wsdd_Hello(struct soap *soap, soap_wsdd_mode mode, const char *endpoint, co
 {
   struct wsdd__HelloType req;
   struct wsdd__ScopesType scopes;
-  const char *Action = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01/Hello";
+  const char *Action = SOAP_NAMESPACE_OF_wsdd"/Hello";
   const char *To = endpoint;
 
   /* SOAP Header */
   if (mode == SOAP_WSDD_ADHOC)
-    To = "urn:docs-oasis-open-org:ws-dd:ns:discovery:2009:01";
+    To = to_ts_URL;
   soap_wsa_request(soap, MessageID, To, Action);
   soap_wsa_add_RelatesTo(soap, RelatesTo);
+#ifdef SOAP_WSA_2005
+  soap_wsdd_set_AppSequence(soap);
+#else
   if (mode == SOAP_WSDD_ADHOC)
     soap_wsdd_set_AppSequence(soap);
   else
     soap_wsdd_reset_AppSequence(soap);
+#endif
 
   /* Hello */
   soap_default_wsdd__HelloType(soap, &req);
@@ -440,17 +509,21 @@ soap_wsdd_Bye(struct soap *soap, soap_wsdd_mode mode, const char *endpoint, cons
 {
   struct wsdd__ByeType req;
   struct wsdd__ScopesType scopes;
-  const char *Action = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01/Bye";
+  const char *Action = SOAP_NAMESPACE_OF_wsdd"/Bye";
   const char *To = endpoint;
 
   /* SOAP Header */
   if (mode == SOAP_WSDD_ADHOC)
-    To = "urn:docs-oasis-open-org:ws-dd:ns:discovery:2009:01";
+    To = to_ts_URL;
   soap_wsa_request(soap, MessageID, To, Action);
+#ifdef SOAP_WSA_2005
+  soap_wsdd_set_AppSequence(soap);
+#else
   if (mode == SOAP_WSDD_ADHOC)
     soap_wsdd_set_AppSequence(soap);
   else
     soap_wsdd_reset_AppSequence(soap);
+#endif
 
   /* Bye */
   soap_default_wsdd__ByeType(soap, &req);
@@ -507,12 +580,12 @@ soap_wsdd_Probe(struct soap *soap, soap_wsdd_mode mode, soap_wsdd_to to, const c
   struct wsdd__ProbeType req;
   struct __wsdd__ProbeMatches res;
   struct wsdd__ScopesType scopes;
-  const char *Action = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01/Probe";
+  const char *Action = SOAP_NAMESPACE_OF_wsdd"/Probe";
   const char *To = endpoint;
 
   /* SOAP Header */
   if (to == SOAP_WSDD_TO_TS)
-    To = "urn:docs-oasis-open-org:ws-dd:ns:discovery:2009:01";
+    To = to_ts_URL;
   soap_wsa_request(soap, MessageID, To, Action);
   soap_wsa_add_ReplyTo(soap, ReplyTo);
   soap_wsdd_reset_AppSequence(soap);
@@ -599,12 +672,12 @@ soap_wsdd_Resolve(struct soap *soap, soap_wsdd_mode mode, soap_wsdd_to to, const
   unsigned int MessageNumber = 0;
   struct wsdd__ResolveType req;
   struct __wsdd__ResolveMatches res;
-  const char *Action = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01/Resolve";
+  const char *Action = SOAP_NAMESPACE_OF_wsdd"/Resolve";
   const char *To = endpoint;
 
   /* SOAP Header */
   if (to == SOAP_WSDD_TO_TS)
-    To = "urn:docs-oasis-open-org:ws-dd:ns:discovery:2009:01";
+    To = to_ts_URL;
   soap_wsa_request(soap, MessageID, To, Action);
   soap_wsa_add_ReplyTo(soap, ReplyTo);
   soap_wsdd_reset_AppSequence(soap);
@@ -757,7 +830,7 @@ ProbeMatches to the Client.
 int
 soap_wsdd_ProbeMatches(struct soap *soap, const char *endpoint, const char *MessageID, const char *RelatesTo, const char *To, struct wsdd__ProbeMatchesType *matches)
 {
-  const char *Action = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01/ProbeMatches";
+  const char *Action = SOAP_NAMESPACE_OF_wsdd"/ProbeMatches";
 
   /* 0..APP_MAX_DELAY ms delay */
   soap_wsdd_delay(soap);
@@ -803,7 +876,7 @@ soap_wsdd_ResolveMatches(struct soap *soap, const char *endpoint, const char *Me
   struct wsdd__ResolveMatchesType res;
   struct wsdd__ResolveMatchType match;
   struct wsdd__ScopesType scopes;
-  const char *Action = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01/ResolveMatches";
+  const char *Action = SOAP_NAMESPACE_OF_wsdd"/ResolveMatches";
 
   /* 0..APP_MAX_DELAY ms delay */
   soap_wsdd_delay(soap);
@@ -1217,7 +1290,7 @@ __wsdd__Probe(struct soap *soap, struct wsdd__ProbeType *Probe)
     int err;
     int (*fpost)(struct soap*, const char*, const char*, int, const char*, const char*, size_t);
     const char *MessageID = soap_wsa_rand_uuid(soap);
-    const char *Action = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01/ProbeMatches";
+    const char *Action = SOAP_NAMESPACE_OF_wsdd"/ProbeMatches";
 
     /* SOAP Header */
     soap_wsdd_set_AppSequence(soap);
@@ -1340,7 +1413,7 @@ __wsdd__Resolve(struct soap *soap, struct wsdd__ResolveType *Resolve)
     int err;
     int (*fpost)(struct soap*, const char*, const char*, int, const char*, const char*, size_t);
     const char *MessageID = soap_wsa_rand_uuid(soap);
-    const char *Action = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01/ResolveMatches";
+    const char *Action = SOAP_NAMESPACE_OF_wsdd"/ResolveMatches";
 
     /* SOAP Header */
     soap_wsdd_set_AppSequence(soap);

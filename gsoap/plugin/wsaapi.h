@@ -94,6 +94,8 @@ struct soap_wsa_data
   void (*fseterror)(struct soap*, const char**, const char**);
   /** fresponse callback is used to change a HTTP response into a HTTP POST */
   int (*fresponse)(struct soap*, int, size_t);
+  /** fdisconnect callback is used to accept HTTP 202 */
+  int (*fdisconnect)(struct soap*);
 };
 
 int soap_wsa(struct soap *soap, struct soap_plugin *p, void *arg);
@@ -106,6 +108,10 @@ int soap_wsa_add_NoReply(struct soap *soap);
 int soap_wsa_add_ReplyTo(struct soap *soap, const char *endpoint);
 int soap_wsa_add_FaultTo(struct soap *soap, const char *endpoint);
 int soap_wsa_add_RelatesTo(struct soap *soap, const char *endpoint);
+const char *soap_wsa_From(struct soap *soap);
+const char *soap_wsa_ReplyTo(struct soap *soap);
+const char *soap_wsa_FaultTo(struct soap *soap);
+const char *soap_wsa_RelatesTo(struct soap *soap);
 
 int soap_wsa_check(struct soap *soap);
 int soap_wsa_reply(struct soap *soap, const char *id, const char *action);

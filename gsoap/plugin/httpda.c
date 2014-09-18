@@ -5,7 +5,7 @@
 	Supports both Basic and Digest authentication.
 
 gSOAP XML Web services tools
-Copyright (C) 2000-2011, Robert van Engelen, Genivia Inc., All Rights Reserved.
+Copyright (C) 2000-2013, Robert van Engelen, Genivia Inc., All Rights Reserved.
 This part of the software is released under one of the following licenses:
 GPL, the gSOAP public license, or Genivia's license for commercial use.
 --------------------------------------------------------------------------------
@@ -20,7 +20,7 @@ WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
 for the specific language governing rights and limitations under the License.
 
 The Initial Developer of the Original Code is Robert A. van Engelen.
-Copyright (C) 2000-2011, Robert van Engelen, Genivia, Inc., All Rights Reserved.
+Copyright (C) 2000-2013, Robert van Engelen, Genivia, Inc., All Rights Reserved.
 --------------------------------------------------------------------------------
 GPL license.
 
@@ -95,9 +95,18 @@ To make a client-side service call:
 
 @code
 struct http_da_info info;
-http_da_save(&soap, &info, "<authrealm>", "<userid>", "<passwd>");
 if (soap_call_ns__method(&soap, ...))
-  ... // error
+{
+  if (soap.error == 401)
+  {
+    http_da_save(&soap, &info, "<authrealm>", "<userid>", "<passwd>");
+    if (soap_call_ns__method(&soap, ...)) // try again
+      ... // error
+    http_da_release(&soap, &info);
+  }
+  else
+    ... // other error
+}
 @endcode
 
 The "<authrealm>" is a string that is associated with the server's realm. It
@@ -121,23 +130,38 @@ you must restore the authentication state and then finally release it:
 
 @code
 struct http_da_info info;
+bool auth = false;
 
-http_da_save(&soap, &info, "<authrealm>", "<userid>", "<passwd>");
+if (soap_call_ns__method(&soap, ...))
+{
+  if (soap.error == 401)
+  {
+    http_da_save(&soap, &info, "<authrealm>", "<userid>", "<passwd>");
+    auth = true;
+  }
+  else
+    ... // other error
+}
+
 if (soap_call_ns__method(&soap, ...))
   ... // error
 
-http_da_restore(&soap, &info);
+if (auth)
+  http_da_restore(&soap, &info);
 if (soap_call_ns__method(&soap, ...))
   ... // error
 
 soap_destroy(&soap); // okay to dealloc data
 soap_end(&soap);     // okay to dealloc data
 
-http_da_restore(&soap, &info);
+if (auth)
+  http_da_restore(&soap, &info);
 if (soap_call_ns__method(&soap, ...))
   ... // error
 
-http_da_release(&soap, &info);
+if (auth)
+  http_da_release(&soap, &info);
+
 soap_destroy(&soap);
 soap_end(&soap);
 soap_done(&soap);
@@ -148,23 +172,25 @@ functions:
 
 @code
 struct http_da_info info;
-
-http_da_proxy_save(&soap, &info, "<authrealm>", "<userid>", "<passwd>");
+...
 if (soap_call_ns__method(&soap, ...))
-  ... // error
+{
+  if (soap.error == 407)
+  {
+    http_da_proxy_save(&soap, &info, "<authrealm>", "<userid>", "<passwd>");
+    auth = true;
+  }
+  else
+    ... // error
+}
 
-http_da_proxy_restore(&soap, &info);
-if (soap_call_ns__method(&soap, ...))
-  ... // error
-
-soap_destroy(&soap); // okay to dealloc data
-soap_end(&soap);     // okay to dealloc data
-
-http_da_proxy_restore(&soap, &info);
+if (auth)
+  http_da_proxy_restore(&soap, &info);
 if (soap_call_ns__method(&soap, ...))
   ... // error
 
 http_da_proxy_release(&soap, &info);
+
 soap_destroy(&soap);
 soap_end(&soap);
 soap_done(&soap);
@@ -347,7 +373,7 @@ static int http_da_preparesend(struct soap *soap, const char *buf, size_t len);
 static int http_da_preparerecv(struct soap *soap, const char *buf, size_t len);
 static int http_da_preparefinalrecv(struct soap *soap);
 
-static int http_da_verify_method(struct soap *soap, char *method, char *passwd);
+static int http_da_verify_method(struct soap *soap, const char *method, const char *passwd);
 static void http_da_session_start(const char *realm, const char *nonce, const char *opaque);
 static int http_da_session_update(const char *realm, const char *nonce, const char *opaque, const char *cnonce, const char *ncount);
 static void http_da_session_cleanup();
@@ -394,6 +420,14 @@ static int http_da_init(struct soap *soap, struct http_da_data *data)
   soap->fprepareinitrecv = http_da_prepareinitrecv;
   data->context = NULL;
   memset(data->digest, 0, sizeof(data->digest));
+  data->nonce = NULL;
+  data->opaque = NULL;
+  data->qop = NULL;
+  data->alg = NULL;
+  data->nc = 0;
+  data->ncount = NULL;
+  data->cnonce = NULL;
+  data->response = NULL;
 
   return SOAP_OK;
 }
@@ -436,7 +470,7 @@ static int http_da_post_header(struct soap *soap, const char *key, const char *v
   if (!data)
     return SOAP_PLUGIN_ERROR;
 
-  /* client's HTTP Authorization response */
+  /* client's HTTP Authorization request */
   if (key && (!strcmp(key, "Authorization") || !strcmp(key, "Proxy-Authorization")))
   {
     char HA1[33], entityHAhex[33], response[33];
@@ -448,10 +482,18 @@ static int http_da_post_header(struct soap *soap, const char *key, const char *v
 
     md5_handler(soap, &data->context, MD5_FINAL, data->digest, 0);
 
+    if (!userid || !passwd || !soap->authrealm || !data->nonce)
+    {
+#ifdef SOAP_DEBUG
+      fprintf(stderr, "Debug message: authentication header failed, missing authentication data\n");
+#endif
+      return SOAP_OK;
+    }
+
     http_da_calc_nonce(soap, cnonce);
     http_da_calc_HA1(soap, &data->context, data->alg, userid, soap->authrealm, passwd, data->nonce, cnonce, HA1);
 
-    if (data->qop && !soap_tag_cmp(data->qop, "*auth-int*"))
+    if (soap->status != SOAP_GET && soap->status != SOAP_CONNECT && data->qop && !soap_tag_cmp(data->qop, "*auth-int*"))
     {
       qop = "auth-int";
       soap_s2hex(soap, (unsigned char*)data->digest, entityHAhex, 16);
@@ -468,20 +510,36 @@ static int http_da_post_header(struct soap *soap, const char *key, const char *v
     else
       method = "POST";
 
+#ifdef HAVE_SNPRINTF
+    soap_snprintf(ncount, sizeof(ncount), "%8.8lx", data->nc++);
+#else
     sprintf(ncount, "%8.8lx", data->nc++);
+#endif
 
     http_da_calc_response(soap, &data->context, HA1, data->nonce, ncount, cnonce, qop, method, soap->path, entityHAhex, response);
 
+#ifdef HAVE_SNPRINTF
+    soap_snprintf(soap->tmpbuf, sizeof(soap->tmpbuf), "Digest realm=\"%s\", username=\"%s\", nonce=\"%s\", uri=\"%s\", nc=%s, cnonce=\"%s\", response=\"%s\"", soap->authrealm, userid, data->nonce, soap->path, ncount, cnonce, response);
+#else
     sprintf(soap->tmpbuf, "Digest realm=\"%s\", username=\"%s\", nonce=\"%s\", uri=\"%s\", nc=%s, cnonce=\"%s\", response=\"%s\"", soap->authrealm, userid, data->nonce, soap->path, ncount, cnonce, response);
+#endif
     if (data->opaque)
+#ifdef HAVE_SNPRINTF
+      soap_snprintf(soap->tmpbuf + strlen(soap->tmpbuf), sizeof(soap->tmpbuf) - strlen(soap->tmpbuf), ", opaque=\"%s\"", data->opaque);
+#else
       sprintf(soap->tmpbuf + strlen(soap->tmpbuf), ", opaque=\"%s\"", data->opaque);
+#endif
     if (qop)
+#ifdef HAVE_SNPRINTF
+      soap_snprintf(soap->tmpbuf + strlen(soap->tmpbuf), sizeof(soap->tmpbuf) - strlen(soap->tmpbuf), ", qop=\"%s\"", qop);
+#else
       sprintf(soap->tmpbuf + strlen(soap->tmpbuf), ", qop=\"%s\"", qop);
+#endif
 
     return data->fposthdr(soap, key, soap->tmpbuf);
   }
 
-  /* server's HTTP Authorization response */
+  /* server's HTTP Authorization challenge/response */
   if (key && (!strcmp(key, "WWW-Authenticate") || !strcmp(key, "Proxy-Authenticate")))
   {
     char nonce[HTTP_DA_NONCELEN];
@@ -492,7 +550,11 @@ static int http_da_post_header(struct soap *soap, const char *key, const char *v
 
     http_da_session_start(soap->authrealm, nonce, opaque);
 
+#ifdef HAVE_SNPRINTF
+    soap_snprintf(soap->tmpbuf, sizeof(soap->tmpbuf), "Digest realm=\"%s\", qop=\"auth,auth-int\", nonce=\"%s\", opaque=\"%s\"", soap->authrealm, nonce, opaque);
+#else
     sprintf(soap->tmpbuf, "Digest realm=\"%s\", qop=\"auth,auth-int\", nonce=\"%s\", opaque=\"%s\"", soap->authrealm, nonce, opaque);
+#endif
 
     return data->fposthdr(soap, key, soap->tmpbuf);
   }
@@ -583,7 +645,9 @@ static int http_da_prepareinitsend(struct soap *soap)
     return SOAP_PLUGIN_ERROR;
 
   if ((soap->mode & SOAP_IO) != SOAP_IO_STORE && (soap->mode & (SOAP_ENC_DIME | SOAP_ENC_MIME)))
-  { /* TODO: how to handle streaming MIME/DIME attachments? Does not work yet */
+  { /* support non-streaming MIME/DIME attachments by buffering the message */
+    soap->omode &= ~SOAP_IO;
+    soap->omode |= SOAP_IO_STORE;
     soap->mode &= ~SOAP_IO;
     soap->mode |= SOAP_IO_STORE;
   }
@@ -810,17 +874,17 @@ void http_da_proxy_release(struct soap *soap, struct http_da_info *info)
  *
 \******************************************************************************/
 
-int http_da_verify_post(struct soap *soap, char *passwd)
+int http_da_verify_post(struct soap *soap, const char *passwd)
 {
   return http_da_verify_method(soap, "POST", passwd);
 }
 
-int http_da_verify_get(struct soap *soap, char *passwd)
+int http_da_verify_get(struct soap *soap, const char *passwd)
 {
   return http_da_verify_method(soap, "GET", passwd);
 }
 
-static int http_da_verify_method(struct soap *soap, char *method, char *passwd)
+static int http_da_verify_method(struct soap *soap, const char *method, const char *passwd)
 {
   struct http_da_data *data = (struct http_da_data*)soap_lookup_plugin(soap, http_da_id);
   char HA1[33], entityHAhex[33], response[33];
@@ -899,8 +963,12 @@ static int http_da_session_update(const char *realm, const char *nonce, const ch
   struct http_da_session *session;
 
   if (!realm || !nonce || !opaque || !cnonce || !ncount)
+  {
+#ifdef SOAP_DEBUG
+    fprintf(stderr, "Debug message: authentication update failed, missing authentication data\n");
+#endif
     return SOAP_ERR;
-
+  }
 #ifdef SOAP_DEBUG
   fprintf(stderr, "Debug message: updating session realm=%s nonce=%s\n", realm, nonce);
 #endif
@@ -979,12 +1047,20 @@ static void http_da_session_cleanup()
 void http_da_calc_nonce(struct soap *soap, char nonce[HTTP_DA_NONCELEN])
 {
   static short count = 0xCA53;
+#ifdef HAVE_SNPRINTF
+  soap_snprintf(nonce, HTTP_DA_NONCELEN, "%8.8x%4.4hx%8.8x", (int)time(NULL), count++, soap_random);
+#else
   sprintf(nonce, "%8.8x%4.4hx%8.8x", (int)time(NULL), count++, soap_random);
+#endif
 }
 
 void http_da_calc_opaque(struct soap *soap, char opaque[HTTP_DA_OPAQUELEN])
 {
+#ifdef HAVE_SNPRINTF
+  soap_snprintf(opaque, HTTP_DA_OPAQUELEN, "%8.8x", soap_random);
+#else
   sprintf(opaque, "%8.8x", soap_random);
+#endif
 }
 
 /******************************************************************************\
@@ -999,9 +1075,9 @@ static void http_da_calc_HA1(struct soap *soap, void **context, const char *alg,
 
   md5_handler(soap, context, MD5_INIT, NULL, 0);
   md5_handler(soap, context, MD5_UPDATE, (char*)userid, strlen(userid));
-  md5_handler(soap, context, MD5_UPDATE, ":", 1);
+  md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
   md5_handler(soap, context, MD5_UPDATE, (char*)realm, strlen(realm));
-  md5_handler(soap, context, MD5_UPDATE, ":", 1);
+  md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
   md5_handler(soap, context, MD5_UPDATE, (char*)passwd, strlen(passwd));
   md5_handler(soap, context, MD5_FINAL, HA1, 0);
 
@@ -1009,9 +1085,12 @@ static void http_da_calc_HA1(struct soap *soap, void **context, const char *alg,
   {
     md5_handler(soap, context, MD5_INIT, NULL, 0);
     md5_handler(soap, context, MD5_UPDATE, HA1, 16);
-    md5_handler(soap, context, MD5_UPDATE, ":", 1);
-    md5_handler(soap, context, MD5_UPDATE, (char*)nonce, strlen(nonce));
-    md5_handler(soap, context, MD5_UPDATE, ":", 1);
+    if (nonce)
+    {
+      md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
+      md5_handler(soap, context, MD5_UPDATE, (char*)nonce, strlen(nonce));
+    }
+    md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
     md5_handler(soap, context, MD5_UPDATE, (char*)cnonce, strlen(cnonce));
     md5_handler(soap, context, MD5_FINAL, HA1, 0);
   };
@@ -1025,11 +1104,11 @@ static void http_da_calc_response(struct soap *soap, void **context, char HA1hex
 
   md5_handler(soap, context, MD5_INIT, NULL, 0);
   md5_handler(soap, context, MD5_UPDATE, (char*)method, strlen(method));
-  md5_handler(soap, context, MD5_UPDATE, ":", 1);
+  md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
   md5_handler(soap, context, MD5_UPDATE, (char*)uri, strlen(uri));
   if (qop && !soap_tag_cmp(qop, "auth-int"))
   { 
-    md5_handler(soap, context, MD5_UPDATE, ":", 1);
+    md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
     md5_handler(soap, context, MD5_UPDATE, entityHAhex, 32);
   }
   md5_handler(soap, context, MD5_FINAL, HA2, 0);
@@ -1038,17 +1117,20 @@ static void http_da_calc_response(struct soap *soap, void **context, char HA1hex
 
   md5_handler(soap, context, MD5_INIT, NULL, 0);
   md5_handler(soap, context, MD5_UPDATE, HA1hex, 32);
-  md5_handler(soap, context, MD5_UPDATE, ":", 1);
-  md5_handler(soap, context, MD5_UPDATE, (char*)nonce, strlen(nonce));
-  md5_handler(soap, context, MD5_UPDATE, ":", 1);
+  if (nonce)
+  {
+    md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
+    md5_handler(soap, context, MD5_UPDATE, (char*)nonce, strlen(nonce));
+  }
+  md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
   if (qop && *qop)
   {
     md5_handler(soap, context, MD5_UPDATE, (char*)ncount, strlen(ncount));
-    md5_handler(soap, context, MD5_UPDATE, ":", 1);
+    md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
     md5_handler(soap, context, MD5_UPDATE, (char*)cnonce, strlen(cnonce));
-    md5_handler(soap, context, MD5_UPDATE, ":", 1);
+    md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
     md5_handler(soap, context, MD5_UPDATE, (char*)qop, strlen(qop));
-    md5_handler(soap, context, MD5_UPDATE, ":", 1);
+    md5_handler(soap, context, MD5_UPDATE, (char*)":", 1);
   }
   md5_handler(soap, context, MD5_UPDATE, HA2hex, 32);
   md5_handler(soap, context, MD5_FINAL, responseHA, 0);

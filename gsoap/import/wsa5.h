@@ -18,6 +18,10 @@
 	- Added //gsoap wsa5  schema namespace2: http://schemas.xmlsoap.org/ws/2004/08/addressing
 	- Added #define SOAP_WSA_2005
 	- Added SOAP_ENV__Header struct
+	- Added SOAP_ENV__Fault one-way operation
+	- Added //gsoap chan schema import: http://schemas.microsoft.com/ws/2005/02/duplex
+	- Added chan__ChannelInstance to wsa5__ReferenceParametersType
+	- Added chan__ChannelInstanceType and chan__ChannelInstance to Header
 
 */
 
@@ -53,10 +57,6 @@
  * Schema Types                                                               *
  *                                                                            *
 \******************************************************************************/
-
-
-/// Built-in type "xs:boolean".
-// enum xsd__boolean_ { _false, _true };
 
 
 /// Typedef synonym for struct wsa5__EndpointReferenceType.
@@ -142,6 +142,8 @@ struct wsa5__EndpointReferenceType
 /// "http://www.w3.org/2005/08/addressing":ReferenceParametersType is a complexType.
 struct wsa5__ReferenceParametersType
 {
+// Added
+    int                                 *chan__ChannelInstance          0;
 /// TODO: <any namespace="##any" minOccurs="0" maxOccurs="unbounded">
 ///       Schema extensibility is user-definable.
 ///       Consult the protocol documentation to change or insert declarations.
@@ -247,7 +249,15 @@ typedef struct wsa5__ProblemActionType _wsa5__ProblemAction;
 
 /// Attribute "http://www.w3.org/2005/08/addressing":IsReferenceParameter of simpleType xs:boolean.
 /// Imported attribute _wsa5__IsReferenceParameter from typemap WS/WS-typemap.dat.
-typedef enum _wsa5__IsReferenceParameter { wsa5__false, wsa5__true } _wsa5__IsReferenceParameter;
+typedef enum _wsa5__IsReferenceParameter { _wsa5__IsReferenceParameter__false, _wsa5__IsReferenceParameter__true } _wsa5__IsReferenceParameter;
+
+// Added
+//gsoap chan schema import: http://schemas.microsoft.com/ws/2005/02/duplex
+/// "http://schemas.microsoft.com/ws/2005/02/duplex":ChannelInstanceType is a complexType.
+struct chan__ChannelInstanceType
+{   int __item;
+    @_wsa5__IsReferenceParameter wsa5__IsReferenceParameter = _wsa5__IsReferenceParameter__false;
+};
 
 /// Added
 struct SOAP_ENV__Header
@@ -259,6 +269,22 @@ struct SOAP_ENV__Header
   mustUnderstand _wsa5__FaultTo   *wsa5__FaultTo   0;
   mustUnderstand _wsa5__To         wsa5__To        0;
   mustUnderstand _wsa5__Action     wsa5__Action    0;
+                 struct chan__ChannelInstanceType *chan__ChannelInstance 0;
 };
+
+// Added
+//gsoap SOAP_ENV service method-action: Fault http://www.w3.org/2005/08/addressing/soap/fault
+int SOAP_ENV__Fault
+(       _QName			 faultcode,		// SOAP 1.1
+        char			*faultstring,		// SOAP 1.1
+        char			*faultactor,		// SOAP 1.1
+        struct SOAP_ENV__Detail	*detail,		// SOAP 1.1
+        struct SOAP_ENV__Code	*SOAP_ENV__Code,	// SOAP 1.2
+        struct SOAP_ENV__Reason	*SOAP_ENV__Reason,	// SOAP 1.2
+        char			*SOAP_ENV__Node,	// SOAP 1.2
+        char			*SOAP_ENV__Role,	// SOAP 1.2
+        struct SOAP_ENV__Detail	*SOAP_ENV__Detail,	// SOAP 1.2
+	void
+);
 
 /* End of wsa5.h */

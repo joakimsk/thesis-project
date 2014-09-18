@@ -273,3 +273,6 @@ SOAP_ENV__Detail	= | struct SOAP_ENV__Detail
 SOAP_ENV__Code		= | struct SOAP_ENV__Code
 SOAP_ENV__Subcode	= | struct SOAP_ENV__Subcode
 SOAP_ENV__Reason	= | struct SOAP_ENV__Reason
+
+
+

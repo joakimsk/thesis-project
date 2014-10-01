@@ -23,8 +23,8 @@ Mainly developed on Windows 7
 
 Screenshot
 ------------
-![alt tag](http://raw.githubusercontent.com/joakimsk/the_project/master/screenshot.jpg "py_camglyph.py")
-
+py_camglyph.py running off an AXIS CCTV Camera video stream.
+![ScreenShot](screenshot.jpg)
 Dependencies
 ------------
 - C++ Compiler (VS 2013 Express or gcc)

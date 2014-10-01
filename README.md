@@ -23,7 +23,7 @@ Mainly developed on Windows 7
 
 Screenshot
 ------------
-![alt tag](https://github.com/joakimsk/the_project/screenshot.jpg "py_camglyph.py")
+![alt tag](http://raw.githubusercontent.com/joakimsk/the_project/master/screenshot.jpg "py_camglyph.py")
 
 Dependencies
 ------------

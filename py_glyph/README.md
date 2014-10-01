@@ -1,18 +1,38 @@
-the_project
+py_glyph.py
 ===========
+initial revision
 
-Implementation for the project thesis, preliminary work before the master thesis. Mashup of various technologies.
+py_glyph.py will load a single image and try to identify the glyphs found.
+It is then compared to the fixed glyph from checkIfValidGlyph().
 
-Final purpose is to have a suite which can track and follow glyphs using PTZ camera coupled with computer vision.
+Not rotation invariant at this current stage.
 
-Mainly developed on Windows 7
+validGlyph = np.matrix('
+1 1 1 1 1;
+1 0 0 1 1;
+1 1 0 0 1;
+1 1 0 1 1;
+1 1 1 1 1
+')
+
+General process implemented
+------------
+1: Grayscale
+2: Blur gaussian 5x5
+3: Canny edge detection
+4: Contour finding, minimum areal to eliminate tiny shit
+5: Find aproximations with exactly 4 points from contour, coloured red
+6: Perspective transform into 250x250 pixler ROI
+7: Binary Otsu tresholding on each ROI from #6.
+8: Segmenting 5x5 matrix, using "fill" where fill = size - black_pixels and fill > 0.5 = 1 (True)
+9: Comparing 5x5 matrix to valid glyph 5x5 matrix, one-to-one (NOT rotation independent for now)
 
 Dependencies
 ------------
-- C++ Compiler (VS 2013 Express or gcc)
 - Python 2.7
-- gSOAP
-- ONVIF-S WSDL
-- OpenSSL
 - OpenCV
 - Numpy
+
+Tested on Windows 7
+By Joakim Skjefstad for Project Thesis NTNU 2014
+skjefstad.joakim@gmail.com

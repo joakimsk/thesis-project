@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 '''
-py_camsnapshot.py initial revision
+py_camsnapshot.py
+===========
+initial revision
 
 py_camsnapshot.py will iterate through cams.csv and grab a snapshot of each camera.
 Requires MJPEG access to CCTV-camera and correct connection string.
@@ -15,10 +17,12 @@ log.txt: # Date and time of capture;Target folder name; Was picture captured?
 2014-10-01 20:04:56.731000;cam1;True
 2014-10-01 20:04:56.731000;cam2;True
 
-Dependencies:
-Python 2.7
-OpenCV
-Numpy
+Dependencies
+------------
+- Python 2.7
+- OpenCV
+- Numpy
+
 
 Tested on Windows 7
 By Joakim Skjefstad for Project Thesis NTNU 2014

@@ -1,2 +1,2 @@
-py_glyph.py
+py_camglyph.py
 pause

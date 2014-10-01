@@ -21,6 +21,10 @@ Mainly developed on Windows 7
 - Implement proof-of-concept in C++
 - Increase robustness and noise removal through super-resolution
 
+Screenshot
+------------
+![alt tag](https://github.com/joakimsk/the_project/screenshot.jpg "py_camglyph.py")
+
 Dependencies
 ------------
 - C++ Compiler (VS 2013 Express or gcc)

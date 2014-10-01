@@ -124,7 +124,7 @@ def checkRegionFill(otsu_roi_part):
     #print width, height, size, fill
     return (fill/size)
 
-source = cv2.imread('05.png') # Load image as greyscale
+source = cv2.imread('05.jpg') # Load image as greyscale
 sourceClone = source.copy()
 height, width, depth = sourceClone.shape
 print "Image loaded (height, width, depth):", height, width, depth
@@ -178,6 +178,7 @@ while True:
     for valid in validGlyhpsFound:
         i = i + 1
         cv2.imshow(str(i), valid)
+        print "Valid glyph found: #",i
         
     if cv2.waitKey(1) ==27:
         exit(0)

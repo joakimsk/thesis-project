@@ -16,6 +16,7 @@ Mainly developed on Windows 7
 
 # Primary effort
 - Implement proof-of-concept glyph tracking CCTV camera in Python
+- Implement PTZ controller in C++ using GSOAP, and connect to glyph tracking program
 
 ## Secondary effort
 - Implement proof-of-concept in C++

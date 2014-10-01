@@ -1,0 +1,2 @@
+"House camera";cam1;http://ptz:ptz@129.241.154.82/mjpg/video.mjpg
+"Dog camera";cam2;http://ptz:ptz@129.241.154.81/mjpg/video.mjpx

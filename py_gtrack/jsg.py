@@ -8,7 +8,7 @@ import numpy as np
 Implements glyph finding using OpenCV.
 Written by Joakim Skjefstad
 """
-logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 class PotentialGlyph:
 	def __init__(self, nr, contour, approx_poly, area, moment):
@@ -105,7 +105,7 @@ def find_potential_glyphs(img, minimum_area):
 def preprocess(img):
 	height, width, depth = img.shape
 	img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	#img_blur = cv2.GaussianBlur(img_gray,(3,3),0)
+	img_blur = cv2.GaussianBlur(img_gray,(3,3),0)
 	img_edge = cv2.Canny(img_gray, 100, 200)
 	return img_edge
 
@@ -117,9 +117,10 @@ def compare_glyphs(glyph_matrix, target_glyph_matrix):
 	return False
 
 def delta_to_center(source_img, glyph):
+	delta_array = [ 0,0 ]
 	height, width, depth = source_img.shape
 	center_x = width/2
 	center_y = height/2
-	delta_x = center_x - glyph.cx
-	delta_y = glyph.cy - center_y  
-	print delta_x,delta_y
+	delta_array[0] = center_x - glyph.cx
+	delta_array[1] = glyph.cy - center_y  
+	return delta_array

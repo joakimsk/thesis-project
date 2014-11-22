@@ -109,11 +109,12 @@ def preprocess(img):
 	img_edge = cv2.Canny(img_gray, 100, 200)
 	return img_edge
 
-def compare_glyphs(glyph_matrix, target_glyph_matrix):
-	for i in range(4):
-		if (target_glyph_matrix==glyph_matrix).all():
-			return True
-		glyph_matrix = np.rot90(glyph_matrix)
+def compare_glyphs(glyph_matrix, target_list):
+	for matrix in target_list:
+		for i in range(4):
+			if (matrix==glyph_matrix).all():
+				return True
+			glyph_matrix = np.rot90(glyph_matrix)
 	return False
 
 def delta_to_center(source_img, glyph):

@@ -8,11 +8,16 @@ import random
 import jsg
 import ptz
 
-target_glyph_matrix = np.matrix('1 1 1 1 1; 1 0 0 1 1; 1 1 0 0 1; 1 1 0 1 1; 1 1 1 1 1')
+machine1 = np.matrix('1 1 1 1 1; 1 0 1 0 1; 1 0 1 1 1; 1 0 0 0 1; 1 1 1 1 1')
+machine2 = np.matrix('1 1 1 1 1; 1 0 0 0 1; 1 1 0 1 1; 1 1 0 1 1; 1 1 1 1 1')
+
+target_list = []
+target_list.append(machine1)
+target_list.append(machine2)
 
 collage = np.zeros((50,300, 3), np.uint8)
 
-Camera = ptz.AxisCamera('129.241.154.82', '/axis-cgi/com/', 'root', 'JegLikerKanelSnurrer')
+#Camera = ptz.AxisCamera('129.241.154.82', '/axis-cgi/com/', 'root', 'JegLikerKanelSnurrer')
 
 def init_capture_device(is_cctv):
     if (is_cctv == True):
@@ -41,33 +46,37 @@ def grab_frame(capture_device, is_cctv):
                     i = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8),cv2.CV_LOAD_IMAGE_COLOR)
                     return i
 
-capture_device = init_capture_device(True)
+capture_device = init_capture_device(False)
 while True:
-    source = grab_frame(capture_device, True)
+    source = grab_frame(capture_device, False)
     temp_img = jsg.preprocess(source)
+
     potential_glyphs = jsg.find_potential_glyphs(temp_img, 100.0)
     for glyph in potential_glyphs:
         glyph.compute_glyph(source)
-        if jsg.compare_glyphs(glyph.glyph_matrix,target_glyph_matrix):
-            print glyph.glyph_matrix
+        if jsg.compare_glyphs(glyph.glyph_matrix,target_list):
+            print "Hit ", glyph.nr
+            #print glyph.glyph_matrix
             cv2.drawContours(source,[glyph.approx_poly],0,(0,255,0),4)
             cv2.circle(source,(glyph.cx,glyph.cy),5,(255,0,255),-1)
             cv2.putText(source,str(glyph.nr), (glyph.cx,glyph.cy), cv2.FONT_HERSHEY_PLAIN, 2, (255,255,0), 2)
             delta_array = jsg.delta_to_center(source, glyph)
-            for item in delta_array:
-                print "delta",item
+            #for item in delta_array:
+            #    print "delta",item
             #print "PANNING",-0.01*delta_array[0]
-            Camera.relative_pan(-0.01*delta_array[0])
-            Camera.tilt(-0.01*delta_array[1])
+                #Camera.relative_pan(-0.01*delta_array[0])
+                #Camera.tilt(-0.01*delta_array[1])
             print glyph.nr
-            break
+            #break
             #small = cv2.resize(glyph.img_roi, (50,50), interpolation =cv2.INTER_AREA)
+            cv2.imshow('Roi',glyph.img_roi)
+            cv2.imshow('Otsu',glyph.img_roi_otsu)
             #collage[0:50,(0+(50*glyph.nr)):(50+(50*glyph.nr))] = small
             #collage[(glyph.nr*50)+50:(glyph.nr*50)+50,(glyph.nr*50)+50:(glyph.nr*50)+50] = 
         else:
             cv2.drawContours(source,[glyph.contour],0,(0,0,255),4)
-    #cv2.imshow('Collage',collage)
-    cv2.imshow('Soruce',source)
+   # cv2.imshow('Collage',collage)
+    cv2.imshow('Source',source)
     
     if cv2.waitKey(1) ==27:
         exit(0)

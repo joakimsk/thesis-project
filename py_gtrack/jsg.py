@@ -92,7 +92,7 @@ def find_potential_glyphs(img, minimum_area):
 	potential_glyphs = []
 	nr = 0
 	for contour in contours:
-		approx_poly = cv2.approxPolyDP(contour, 0.01*cv2.arcLength(contour, True), True)
+		approx_poly = cv2.approxPolyDP(contour, 0.02*cv2.arcLength(contour, True), True)
 		if len(approx_poly)==4:
 			area = cv2.contourArea(contour)
 			if area >= minimum_area:

@@ -11,23 +11,30 @@ CAM_AUTH = requests.auth.HTTPDigestAuth('root', 'mhwirth')
 
 s = requests.Session()
 s.auth = CAM_AUTH
-
-
-def relative_pan(offset):
-    payload = { 'rpan' : str(offset)}
-    print payload
+        
+def brightness(offset):
+    payload = { 'brightness' : str(offset)}
     code = s.post(CAMERA_URL, data=payload, auth=CAM_AUTH).status_code
     if code == 204:
         return True
     else:
-        print 'pan failed'
+        print 'brightness failed'
         return False
-
-def tilt(offset):
-    payload = { 'rtilt' : str(offset)}
+        
+def focus(offset):
+    payload = { 'focus' : str(offset)}
     code = s.post(CAMERA_URL, data=payload, auth=CAM_AUTH).status_code
     if code == 204:
         return True
     else:
-        print 'pan failed'
+        print 'focus failed'
+        return False
+        
+def iris(offset):
+    payload = { 'iris' : str(offset)}
+    code = s.post(CAMERA_URL, data=payload, auth=CAM_AUTH).status_code
+    if code == 204:
+        return True
+    else:
+        print 'iris failed'
         return False

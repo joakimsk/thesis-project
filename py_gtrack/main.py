@@ -2,11 +2,14 @@
 import cv2
 import sys
 import numpy as np
-import urllib
+import requests
 import random
 
 import jsg
 import ptz
+
+CV_LOAD_IMAGE_COLOR = 1
+CAMERA_URL = "http://192.168.0.108/mjpg/video.mjpg"
 
 # Glyph tracking, combining CCTV and Webcam into one solution.
 # Vision algorithm is implemented in the imported jsg module.
@@ -16,7 +19,6 @@ import ptz
 
 print "Glyph-tracking proof of concept. Use ESC to exit program."
 print "Written by Joakim Skjefstad (skjefstad.joakim@gmail.com) Autumn 2014"
-print "Preproject for master thesis. M.Sc in Technical Cybernetics at NTNU, Norway."
 print "Preproject for master thesis. M.Sc in Technical Cybernetics at NTNU, Norway."
 
 # Target specification, allows multiple glyphs to be tracked at once, however this increases processing time per frame
@@ -30,14 +32,17 @@ target_list.append(machine1)
 collage = np.zeros((50,300, 3), np.uint8)
 
 # Hard-coded CCTV Camera for PTZ-module. Change this when needed.
-Camera = ptz.AxisCamera('129.241.154.82', '/axis-cgi/com/', 'root', 'JegLikerKanelSnurrer')
+#Camera = ptz.AxisCamera('129.241.154.82', '/axis-cgi/com/', 'root', 'JegLikerKanelSnurrer')
 
 def init_capture_device(is_cctv):
     if (is_cctv == True):
         print "Using CCTV MJPEG stream"
-        # Hard-coded CCTV Camera MJPEG stream. Change this when needed.
-        stream=urllib.urlopen('http://ptz:ptz@129.241.154.82/mjpg/video.mjpg')
-        return stream
+        session = requests.Session()
+        auth = requests.auth.HTTPDigestAuth('ptz', 'ptz')
+        request = requests.Request("GET", CAMERA_URL).prepare()
+        request.prepare_auth(auth)
+        response_stream = session.send(request, stream=True)        #stream=urllib.urlopen('http://ptz:ptz@192.168.0.108/mjpg/video.mjpg')
+        return response_stream
     else:
         print "Using webcam stream"
         cap = cv2.VideoCapture(0)
@@ -50,7 +55,7 @@ def grab_frame(capture_device, is_cctv):
     else:
         bytes=''
         while True:
-            bytes+=capture_device.read(1024)
+            bytes+=capture_device.raw.read(1024)
             a = bytes.find('\xff\xd8')
             if a !=-1:
                 b = bytes.find('\xff\xd9', a)
@@ -60,13 +65,13 @@ def grab_frame(capture_device, is_cctv):
                     i = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8),cv2.CV_LOAD_IMAGE_COLOR)
                     return i
 
-capture_device = init_capture_device(False) # SET TO TRUE FOR CCTV STREAM
+capture_device = init_capture_device(True) # SET TO TRUE FOR CCTV STREAM
 while True:
     for frame in range(0,5):
-        source = grab_frame(capture_device, False) # SET TO TRUE FOR CCTV STREAM
+        source = grab_frame(capture_device, True) # SET TO TRUE FOR CCTV STREAM
     
     temp_img = jsg.preprocess(source)
-
+    
     potential_glyphs = jsg.find_potential_glyphs(temp_img, 100.0)
     for glyph in potential_glyphs:
         glyph.compute_glyph(source)

@@ -25,8 +25,8 @@ print "Preproject for master thesis. M.Sc in Technical Cybernetics at NTNU, Norw
 # Target specification
 TARGET = np.matrix('1 1 1 1 1; 1 0 1 0 1; 1 0 1 1 1; 1 0 0 0 1; 1 1 1 1 1')
 RESIZE_TO_WIDTH = 600.0
-P_GAIN_PAN = -0.005
-P_GAIN_TILT = -0.005
+P_GAIN_PAN = -0.045
+P_GAIN_TILT = -0.045
 
 target_list = []
 target_list.append(TARGET)
@@ -43,7 +43,7 @@ fps = 0
 print fps
 
 ptz_last_command_tick = cv2.getTickCount()
-ptz_gracetime_ticks = tick_frequency/2 # 1/6th of a second
+ptz_gracetime_ticks = tick_frequency/4 # 1/6th of a second
 
 def interactive_drawing(event,x,y,flags,param):
     if event==cv2.EVENT_LBUTTONDOWN:
@@ -137,20 +137,20 @@ while True:
     cv2.putText(source, "src=%sx%s downscaled=%sx%s" % (w_source,h_source, w_resized, h_resized), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255))
     cv2.putText(source, "fps=%s" % (fps), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255))
     
-    cv2.imshow('Source',source)
+#    cv2.imshow('Source',source)
     
     key = cv2.waitKey(1)
     if key == 27:
         exit(0)
-    elif key == 2490368:
+    elif key == 119:
         print "Up"
-        ptz.tilt(-P_GAIN_TILT*3000)
-    elif key == 2621440:
+        ptz.tilt(-P_GAIN_TILT*1000)
+    elif key == 115:
         print "Down"
-        ptz.tilt(P_GAIN_TILT*3000)
-    elif key == 2555904:
+        ptz.tilt(P_GAIN_TILT*1000)
+    elif key == 100:
         print "Right"
-        ptz.relative_pan(-P_GAIN_PAN*3000)
-    elif key == 2424832:
+        ptz.relative_pan(-P_GAIN_PAN*1000)
+    elif key == 97:
         print "Left"
-        ptz.relative_pan(P_GAIN_PAN*3000)
+        ptz.relative_pan(P_GAIN_PAN*1000)

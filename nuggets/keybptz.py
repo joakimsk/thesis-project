@@ -21,15 +21,17 @@ while True:
     key = cv2.waitKey(1)
     if key == 27:
         exit(0)
-    elif key == 2490368:
+    elif key == 115:
         print "Up"
         ptz.tilt(-GAIN)
-    elif key == 2621440:
+    elif key == 119:
         print "Down"
         ptz.tilt(GAIN)
-    elif key == 2555904:
+    elif key == 97:
         print "Right"
         ptz.relative_pan(-GAIN)
-    elif key == 2424832:
+    elif key == 100:
         print "Left"
         ptz.relative_pan(GAIN)
+    else:
+        print key
